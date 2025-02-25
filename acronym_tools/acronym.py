@@ -168,6 +168,7 @@ class Scene(object):
         if abs(np.sum(stable_poses_probs) - 1.) > 1e-5:
             if np.abs(np.sum(stable_poses_probs)) > 1e-3:
                 stable_poses_probs /= np.sum(stable_poses_probs)
+                stable_poses_probs[np.argmax(stable_poses_probs)] -= np.sum(stable_poses_probs) - 1.
             else:
                 return False, None
         # stable_poses, stable_poses_probs = obj_mesh.compute_stable_poses(threshold=0, sigma=0, n_samples=1)
@@ -206,7 +207,12 @@ class Scene(object):
                 trimesh.transformations.translation_matrix(pts3d),
             )
 
-            pose = self._get_random_stable_pose(stable_poses, stable_poses_probs)
+            try:
+                pose = self._get_random_stable_pose(stable_poses, stable_poses_probs)
+            except ValueError:
+                print("probs: ", stable_poses_probs)
+                print("sum: ", np.sum(stable_poses_probs))
+                raise Exception("No stable poses found!")
 
             placement_T = np.dot(
                 np.dot(placement_T, pose), tra.translation_matrix(-obj_mesh.center_mass)
