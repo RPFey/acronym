@@ -28,6 +28,8 @@ import trimesh
 import trimesh.path
 import trimesh.transformations as tra
 import numpy as np
+import open3d as o3d
+import random
 
 
 class Scene(object):
@@ -163,6 +165,11 @@ class Scene(object):
         stable_poses, stable_poses_probs = stable_obj.compute_stable_poses(
             threshold=0, sigma=0, n_samples=1
         )
+        if abs(np.sum(stable_poses_probs) - 1.) > 1e-5:
+            if np.abs(np.sum(stable_poses_probs)) > 1e-3:
+                stable_poses_probs /= np.sum(stable_poses_probs)
+            else:
+                return False, None
         # stable_poses, stable_poses_probs = obj_mesh.compute_stable_poses(threshold=0, sigma=0, n_samples=1)
 
         # Sample support index
@@ -321,6 +328,39 @@ class Scene(object):
                 transform=self._poses[obj_id],
             )
         return trimesh_scene
+    
+    def as_open3d_scene(self):
+        """Return open3d scene representation.
+
+        Returns:
+            open3d.geometry.TriangleMesh: Scene representation.
+        """
+        open3d_scene = []
+        # import pdb; pdb.set_trace()
+        for obj_id, obj_mesh in self._objects.items():
+            transformed_mesh = obj_mesh.copy()
+            transformed_mesh.apply_transform(self._poses[obj_id])
+            
+            o3d_mesh = o3d.geometry.TriangleMesh()
+            o3d_mesh.vertices = o3d.utility.Vector3dVector(transformed_mesh.vertices)
+            o3d_mesh.triangles = o3d.utility.Vector3iVector(transformed_mesh.faces)
+            o3d_mesh.paint_uniform_color([random.random(), random.random(), random.random()])
+            open3d_scene.append(o3d_mesh)
+            
+        return open3d_scene
+    
+    def sample_points(self, pts_density = 10000):
+        """ Sample points from the scene. """
+        points = {}
+        for obj_id, obj_mesh in self._objects.items():
+            # transformed_mesh = obj_mesh.apply_transform(self._poses[obj_id])
+            total_area = np.sum(obj_mesh.area_faces)
+            pts_cnt = int(total_area * pts_density)
+            sampled_coord = trimesh.sample.sample_surface(obj_mesh, pts_cnt)[0]
+            sampled_coord = sampled_coord @ self._poses[obj_id][:3, :3].T + self._poses[obj_id][:3, 3]
+            points[obj_id] = sampled_coord
+
+        return points
 
     @classmethod
     def random_arrangement(
